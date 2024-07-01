@@ -20,8 +20,8 @@ This project is designed to train a machine learning model that can identify whe
 ## Installation
 1. Clone the repository:
     ```bash
-    git clone <repository_url>
-    cd <repository_directory>
+    git clone https://github.com/AlanTuringKor/hong-depression-detector.git
+    cd hong-depression-detector
     ```
 2. Install the required libraries:
     ```bash
@@ -38,12 +38,12 @@ This project is designed to train a machine learning model that can identify whe
 3. **Train the model:**
    Run the main script to start the fine-tuning process:
     ```bash
-    python train_model.py
+    python hong-depression.py
     ```
    The script will log the progress and save the best model checkpoint based on the F1 score.
 
 ## Script Details
-### `train_model.py`
+### `hong-depression.py`
 This script handles the entire process of training the model. It includes several key functions and configurations:
 
 - **Logging setup:** Configures logging to track the progress and important information.
