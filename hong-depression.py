@@ -15,7 +15,7 @@ from transformers import (
     RobertaTokenizerFast,
 )
 
-from dataset import get_preprocessed_data
+from dataset import get_preprocessed_data, labels
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -64,7 +64,9 @@ def get_fine_tuning_args(model_info: ModelInfo) -> tuple[ClassificationArgs, Dro
     model_args.overwrite_output_dir = True
     model_args.evaluate_during_training = True
     model_args.output_dir = f'{global_config.dir_with_models}{model_info.model_name}_{model_info.model_version}'
-
+    model_args.n_gpu = 0  # Set number of GPUs to 0
+    model_args.fp16 = False  # Disable fp16 as it requires CUDA
+    
     dropout = Dropout(0.1, 0.1, 0.1)
     return model_args, dropout
 
@@ -114,31 +116,84 @@ def fine_tune(model_info: ModelInfo, model_args: ClassificationArgs, dropout: Dr
     train_data = get_preprocessed_data("train", use_shuffle=True)
     eval_data = get_preprocessed_data("dev")
 
-    # Assuming 2 labels for depression classification
-    num_labels = 2
+    num_labels = len(labels)
 
-    with ClassificationModel(
+    # Remove the 'with' statement
+    model = ClassificationModel(
         model_info.model_type,
         model_info.get_model_path(),
         num_labels=num_labels,
         args=model_args,
-    ) as model:
-        set_dropout(model, dropout)
-        logger.info("Starting model training...")
-        model.train_model(train_data, eval_df=eval_data, f1=macro_f1_score)
-        logger.info("Model training completed.")
+        use_cuda=False,
+    )
+    
+    set_dropout(model, dropout)
+    logger.info("Starting model training...")
+    model.train_model(train_data, eval_df=eval_data, f1=macro_f1_score)
+    logger.info("Model training completed.")
 
     best_checkpoint = find_best_checkpoint(Path(model_args.output_dir))
     logger.info(f"Best checkpoint: {best_checkpoint}")
     clean(Path(model_args.output_dir), best_checkpoint)
     logger.info("Cleaned up checkpoints.")
+    
+    #this is the one which is optimized. let me see if this gonna be better or the other one
+def get_fine_tuning_args2(model_info: ModelInfo):
+    model_args = ClassificationArgs()
+    
+    # Learning rate: A slightly lower learning rate for more stable training
+    model_args.learning_rate = 2e-5
+    
+    # Use a learning rate scheduler
+    model_args.use_early_stopping = True
+    model_args.early_stopping_delta = 0.01
+    model_args.early_stopping_metric = "eval_loss"
+    model_args.early_stopping_metric_minimize = True
+    model_args.early_stopping_patience = 3
+    model_args.evaluate_during_training_steps = 200
+
+    # Increase batch size if your GPU can handle it
+    model_args.train_batch_size = 32
+    model_args.eval_batch_size = 64
+    
+    # Adjust number of epochs
+    model_args.num_train_epochs = 5
+    
+    # Implement gradient accumulation for larger effective batch sizes
+    model_args.gradient_accumulation_steps = 2
+    
+    # Adjust sequence length based on your data
+    model_args.max_seq_length = 512  # Assuming your data might have longer sequences
+    
+    # Implement weight decay for regularization
+    model_args.weight_decay = 0.01
+    
+    model_args.overwrite_output_dir = True
+    model_args.evaluate_during_training = True
+    model_args.output_dir = f'{global_config.dir_with_models}{model_info.model_name}_{model_info.model_version}'
+    
+    # Implement warmup steps
+    model_args.warmup_ratio = 0.1
+    
+    # Use fp16 training if your GPU supports it
+    model_args.fp16 = True
+    
+    # Implement logging
+    model_args.logging_steps = 100
+    model_args.save_steps = 1000
+    model_args.save_eval_checkpoints = False
+    model_args.save_model_every_epoch = True
+    
+    # Adjust dropout rates
+    dropout = Dropout(0.1, 0.1, 0.1)
+    
 
 def main():
     logger.info("Starting the fine-tuning process...")
     
     model_info = ModelInfo(
         model_type='roberta',
-        model_name='Hong-depression',
+        model_name='roberta-large',
         model_version='v1'
     )
 
